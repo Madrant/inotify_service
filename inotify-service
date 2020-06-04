@@ -1,0 +1,148 @@
+#!/bin/bash
+
+script_version="1.0.0"
+echo "inotify-watch: ${script_version}"
+
+# Monitor specific directory for new files and process them using provided command or script
+#
+# Usage:
+#   $1 - directory to monitor (default: /mnt/input_data)
+#   $2 - command or script to execute
+#   $3 - events list (default: "moved_to,close_write")
+#   $4 - file extensions to ignore (example: "jpg|png|bmp")
+#
+# Packages required:
+#   inotify-tools
+
+# No exit at error
+set +e
+
+# Locate script directory
+script_dir=$(readlink -f "${0}")
+
+# Process command-line options
+watch_dir="${1}"
+cmd="${2}"
+watch_events="${3}"
+watch_ignore="${4}"
+
+# Check for default parameters
+default_watch_dir="/mnt/input_data"
+default_cmd="echo 'sample echo command'"
+default_watch_events="moved_to,close_write"
+default_watch_ignore="processing|processed|failed"
+
+if [ -z "${watch_dir}" ]; then
+    watch_dir="${default_watch_dir}"
+    echo "Using default watch directory: '${watch_dir}'"
+fi
+
+if [ -z "${cmd}" ]; then
+    cmd="${default_cmd}"
+    echo "Using default command: '${default_cmd}'"
+fi
+
+if [ -z "${watch_events}" ]; then
+    watch_events="${default_watch_events}"
+    echo "Using default watch events: '${watch_events}'"
+fi
+
+# Pre-run checks
+if [ ! -d "${watch_dir}" ]; then
+    echo "Query directory not exists: '${watch_dir}'"
+    exit 1
+fi
+
+# inotifywait setup
+exclude_regexp=".*\\.(${default_watch_ignore})"
+
+if [ ! -z "${watch_ignore}" ]; then
+    exclude_regexp=".*\\.(${default_watch_ignore}|${watch_ignore})"
+fi
+
+blocked_wait_cmd="inotifywait --event ${watch_events} --exclude ${exclude_regexp} --format %f --quiet ${watch_dir}"
+
+# Main watch loop
+echo "Watch for events: [${watch_events}] at '${watch_dir}'"
+echo "Ignore files: ${default_watch_ignore}, ${watch_ignore}"
+echo "Watch command: ${blocked_wait_cmd}"
+
+while true; do
+    # inotifywait returns file name when using %f format
+    file="$(${blocked_wait_cmd})"
+
+    # Get file path, name, directory name and name without extension:
+    fpath="$(readlink -f ${watch_dir}/${file})" # Full file path
+    frelpath="${file}"                          # Path relative to watch_dir
+    fdir=$(dirname "${fpath}")                  # File directory full path
+    fname=$(basename "${fpath}")                # File name
+    fname_noext="${fname%.*}"                   # File name without extension
+    fext="${fname##*.}"                         # File extension
+
+    # Anounce new file
+    echo "New file detected: '${fname}' at '${fdir}'"
+
+    # Create processing marker
+    touch "${fdir}/${fname_noext}.processing"
+
+    # Remove other possible markers
+    rm -f "${fdir}/${fname}.processed"
+    rm -f "${fdir}/${fname}.failed"
+
+    # Profiling: save processing start time in msec
+    start_msec=$(date +%s%3N)
+
+    # Save command output and show on error (ret != 0)
+    cmd_output_file="/tmp/inotify-watch-cmd-output-${start_msec}.remove_me"
+    touch "${cmd_output_file}"
+
+    # Execute command
+    echo "Executing command: ${cmd} ${frelpath} at '${watch_dir}'"
+
+    pushd "${watch_dir}" 2>&1 >/dev/null
+        ${cmd} "${frelpath}" 2>&1 > "${cmd_output_file}"; ret=$?
+    popd 2>&1 >/dev/null
+
+    # Check command ret code
+    if [ ! ${ret} -eq 0 ]; then
+        error_msg="Command '${cmd}' failed with ret: '${ret}' for file: '${frelpath}'"
+        echo "${error_msg}"
+
+        # Create failed marker
+        rm -f "${fdir}/${fname_noext}.processing"
+        echo "${error_msg}" > "${fdir}/${fname_noext}.failed"
+
+        # Provide command output
+        cat "${cmd_output_file}" >> "${fdir}/${fname_noext}.failed"
+        rm -f "${cmd_output_file}"
+
+        # Watch for new files
+        continue
+    fi
+
+    # Show some command output
+    cat "${cmd_output_file}" | head -n 10
+    rm -f "${cmd_output_file}"
+
+    # Show information message on success
+    echo "Command '${cmd}' executed successfully with ret '${ret}' for file: '${frelpath}'"
+
+    # Profiling: calculate query processing time
+    stop_msec=$(date +%s%3N)
+
+    duration_msec=$(( stop_msec - start_msec ))
+    duration_sec=$(( duration_msec/1000 ))
+
+    str_exec_time="Processing time: ${duration_msec} msec [$(( duration_sec/60 )) min $(( duration_sec%60 )) sec]"
+
+    # Create processed marker and save query processing time
+    rm -f "${fdir}/${fname_noext}.processing"
+    echo "${str_exec_time}" > "${fdir}/${fname}.processed"
+
+    # Processing completed
+    echo "${str_exec_time}"
+    echo "File '${fname}' processed successfully"
+done
+
+echo "$0 completed"
+exit 0

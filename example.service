@@ -1,0 +1,28 @@
+[Unit]
+Description=Example of inotify-based data processing service
+After=local-fs.target smbd.service
+Wants=smbd.service
+
+[Service]
+Type=exec
+Restart=on-failure
+
+# Usage: watch-service <watch dir> <database dir>
+ExecStart=inotify-service /mnt/input_data
+
+User=user
+Group=user
+
+[Install]
+WantedBy=multi-user.target
+
+# Installation
+#
+# Copy the unit to /etc/systemd/system directory
+# Then run: systemctl enable example.service
+#
+# Useful commands:
+#
+# Start:        systemctl start example.service
+# View status:  systemctl show example.service
+# View log:     journalctl -u example.service
