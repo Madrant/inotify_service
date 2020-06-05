@@ -19,7 +19,10 @@ WantedBy=multi-user.target
 # Installation
 #
 # Copy the unit to /etc/systemd/system directory
-# Then run: systemctl enable example.service
+#
+# Then run:
+#   systemctl daemon-reload
+#   systemctl enable example.service
 #
 # Useful commands:
 #
