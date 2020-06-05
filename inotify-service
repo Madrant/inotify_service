@@ -28,7 +28,7 @@ watch_ignore="${4}"
 
 # Check for default parameters
 default_watch_dir="/mnt/input_data"
-default_cmd="echo 'sample echo command'"
+default_cmd="touch"
 default_watch_events="moved_to,close_write"
 default_watch_ignore="processing|processed|failed"
 
@@ -97,7 +97,7 @@ while true; do
     touch "${cmd_output_file}"
 
     # Execute command
-    echo "Executing command: ${cmd} ${frelpath} at '${watch_dir}'"
+    echo "Executing command: '${cmd} ${frelpath}' at '${watch_dir}'"
 
     pushd "${watch_dir}" 2>&1 >/dev/null
         ${cmd} "${frelpath}" 2>&1 > "${cmd_output_file}"; ret=$?
