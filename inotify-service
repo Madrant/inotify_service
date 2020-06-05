@@ -8,7 +8,7 @@ echo "inotify-watch: ${script_version}"
 # Usage:
 #   $1 - directory to monitor (default: /mnt/input_data)
 #   $2 - command or script to execute
-#   $3 - events list (default: "moved_to,close_write")
+#   $3 - events list ("events_default" is an alias to default: "moved_to,close_write")
 #   $4 - file extensions to ignore (example: "jpg|png|bmp")
 #
 # Packages required:
@@ -42,7 +42,7 @@ if [ -z "${cmd}" ]; then
     echo "Using default command: '${default_cmd}'"
 fi
 
-if [ -z "${watch_events}" ]; then
+if [ -z "${watch_events}" ] || [ "${watch_events}" = "events_default" ]; then
     watch_events="${default_watch_events}"
     echo "Using default watch events: '${watch_events}'"
 fi
@@ -99,9 +99,9 @@ while true; do
     # Execute command
     echo "Executing command: '${cmd} ${frelpath}' at '${watch_dir}'"
 
-    pushd "${watch_dir}" 2>&1 >/dev/null
-        ${cmd} "${frelpath}" 2>&1 > "${cmd_output_file}"; ret=$?
-    popd 2>&1 >/dev/null
+    pushd "${watch_dir}" >/dev/null
+        ${cmd} "${frelpath}" > "${cmd_output_file}" 2>&1; ret=$?
+    popd >/dev/null
 
     # Check command ret code
     if [ ! ${ret} -eq 0 ]; then
@@ -114,7 +114,7 @@ while true; do
 
         # Provide command output
         cat "${cmd_output_file}" >> "${fdir}/${fname_noext}.failed"
-        cat "${cmd_output_file}" | tail -n 20
+        tail -n 30 "${cmd_output_file}"
         rm -f "${cmd_output_file}"
 
         # Watch for new files
@@ -122,7 +122,11 @@ while true; do
     fi
 
     # Show some command output
-    cat "${cmd_output_file}" | head -n 10
+    head -n 10 "${cmd_output_file}"
+    echo "... [Output omitted]"
+    tail -n 10 "${cmd_output_file}"
+
+    # Cleanup saved command output
     rm -f "${cmd_output_file}"
 
     # Show information message on success
