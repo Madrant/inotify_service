@@ -114,6 +114,7 @@ while true; do
 
         # Provide command output
         cat "${cmd_output_file}" >> "${fdir}/${fname_noext}.failed"
+        cat "${cmd_output_file}" | tail -n 20
         rm -f "${cmd_output_file}"
 
         # Watch for new files
