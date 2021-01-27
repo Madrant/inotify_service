@@ -1,0 +1,2 @@
+# Run cmake from current folder to avoid source tree garbaging, example:
+cmake ../
